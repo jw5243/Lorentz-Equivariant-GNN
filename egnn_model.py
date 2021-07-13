@@ -123,7 +123,8 @@ class E_GCL(nn.Module):
 
 
 class EGNN(nn.Module):
-    def __init__(self, in_node_nf, hidden_nf, out_node_nf, in_edge_nf=0, device='cpu', act_fn=nn.SiLU(), n_layers=4, residual=True, attention=False, normalize=False, tanh=False):
+    def __init__(self, in_node_nf, hidden_nf, out_node_nf, in_edge_nf=0, device='cpu', act_fn=nn.SiLU(), n_layers=4,
+                 residual=True, attention=False, normalize=False, tanh=False):
         '''
         :param in_node_nf: Number of features for 'h' at the input
         :param hidden_nf: Number of hidden features
