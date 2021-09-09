@@ -2,7 +2,10 @@ from random import random
 from math import cos, sin, pi, sqrt
 from copy import deepcopy
 import torch
-from lorentz_equivariant_gnn.legnn_model import LEGNN, get_edges_batch
+from lorentz_equivariant_gnn.legnn_model import LEGNN
+from data_loader import get_edges
+from statistics import stdev, mean
+from matplotlib import pyplot as plt
 
 
 def rotate_x(lorentz_vector, theta):
@@ -69,43 +72,85 @@ def boost(lorentz_vector, gamma_x, gamma_y, gamma_z):
     return boost_z(boost_y(boost_x(lorentz_vector, gamma_x), gamma_y), gamma_z)
 
 
-if __name__ == '__main__':
-    test_angle_x = 2 * pi * random()
-    test_angle_y = 2 * pi * random()
-    test_angle_z = 2 * pi * random()
-    test_boost_x = 2 * random() + 1
-    test_boost_y = 2 * random() + 1
-    test_boost_z = 2 * random() + 1
+def finalize_network_output(output):
+    output = torch.mean(output, dim = 1).squeeze(1)
+    return torch.sigmoid(output)
 
-    print(test_boost_x)
+
+def test_equivariance(network, edges, feature_vector, lorentz_vector, boost, debug = False):
+    boosted_input = boost_x(lorentz_vector, boost)
+    h = feature_vector.unsqueeze(0)
+    x = lorentz_vector.unsqueeze(0)
+    output1, x = network(h, x, edges)
+    x = x.squeeze(0)
+    post_boost_output = boost_x(x, boost)
+
+    boosted_input = boosted_input.unsqueeze(0)
+    output2, boosted_output = network(h, boosted_input, edges)
+
+    output1 = finalize_network_output(output1)
+    output2 = finalize_network_output(output2)
+
+    if debug:
+        #print(torch.isclose(post_boost_output, boosted_output, atol = 1e-8, rtol = 1e-3))
+        print(output1[0].item() - output2[0].item())
+
+    return abs(output1[0].item() - output2[0].item())
+
+
+if __name__ == '__main__':
+    #test_boost_x = 2 * random() + 1
+    test_boost_x = 10000
+
+    #print(test_boost_x)
 
     # Dummy parameters
-    batch_size = 1  # 8
     n_nodes = 4
     n_feat = 1
     x_dim = 4
 
     # Dummy variables h, x and fully connected edges
-    h = torch.rand(batch_size * n_nodes, n_feat)
-    x1 = torch.rand(batch_size * n_nodes, x_dim)
-    x2 = deepcopy(x1)
-    edges, edge_attr = get_edges_batch(n_nodes, batch_size)
+    h = torch.rand(n_nodes, n_feat)
+    x = torch.rand(n_nodes, x_dim)
+    edges = get_edges(n_nodes)
 
-    print("Input: " + str(x1))
+    #print("Input: " + str(x))
+
+    count = 200
+    networks = []
 
     # Initialize LEGNN
-    legnn = LEGNN(input_feature_dim = n_feat, message_dim = 32, output_feature_dim = 1, edge_feature_dim = 1, n_layers = 4)
+    for i in range(count):
+        legnn = LEGNN(input_feature_dim = n_feat, message_dim = 16, output_feature_dim = 1, edge_feature_dim = 0,
+                      n_layers = 3)
+        networks.append(legnn)
 
-    # Run LEGNN
+    mean_relative_deviation = []
+    error_bars = []
+    boost_list = []
+    for i in range(189):
+        error_list = []
+        relative_deviation = []
+        test_boost_x = (1 + 0.05) ** i
+        boost_list.append(test_boost_x)
+        for j in range(count):
+            h = torch.rand(n_nodes, n_feat)
+            x = torch.rand(n_nodes, x_dim)
+            error = test_equivariance(LEGNN(input_feature_dim = n_feat, message_dim = 16, output_feature_dim = 1, edge_feature_dim = 0,
+                      n_layers = 3), edges, h, x, test_boost_x)
+            error_list.append(error)
+            relative_deviation.append(error)
 
-    # First rotate the lorentz vector before passing through network
-    x1 = boost(rotate(x1, test_angle_x, test_angle_y, test_angle_z), test_boost_x, test_boost_y, test_boost_z)
-    h, x1 = legnn(h, x1, edges, edge_attr)
-    print(x1)
+        mean_relative_deviation.append(mean(relative_deviation))
+        error_bars.append(stdev(error_list))
+        print(mean_relative_deviation[-1])
+        print(error_bars[-1])
 
-    # Now rotate the lorentz vector after passing through the network
-    h, x2 = legnn(h, x2, edges, edge_attr)
-    x2 = boost(rotate(x2, test_angle_x, test_angle_y, test_angle_z), test_boost_x, test_boost_y, test_boost_z)
-    print(x2)
-
-    print(torch.isclose(x1, x2, atol = 1e-8, rtol = 1e-3))
+    axes = plt.axes()
+    axes.set_xscale('log')
+    axes.set_yscale('log')
+    plt.plot(boost_list, mean_relative_deviation)
+    plt.xlabel("Lorentz Boost Factor (γ)")
+    plt.ylabel("Relative Deviation in Network Output")
+    #plt.errorbar(boost_list, mean_relative_deviation, error_bars)
+    plt.show()

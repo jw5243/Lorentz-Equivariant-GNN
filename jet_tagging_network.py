@@ -15,11 +15,11 @@ with pd.HDFStore(train_file, mode = 'r') as store:
 
 all_p, all_y = build_dataset(train_df, 1000)
 train_dataset = JetDataset(all_p, all_y)
-train_loader = DataLoader(train_dataset, batch_size = 28, shuffle = True)
+train_loader = DataLoader(train_dataset, batch_size = 2, shuffle = True)
 
 val_all_p, val_all_y = build_dataset(val_df, 1000)
 val_dataset = JetDataset(val_all_p, val_all_y)
-val_loader = DataLoader(val_dataset, batch_size = 8, shuffle = True)
+val_loader = DataLoader(val_dataset, batch_size = 2, shuffle = True)
 
 model = LEGNN(input_feature_dim = 1, message_dim = 16, output_feature_dim = 1, edge_feature_dim = 0, device = device, n_layers = 3)
 model.share_memory()
@@ -31,8 +31,11 @@ train_config = {"n_epochs": 200,
                "patience": 35}
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=train_config["lr"])
-scheduler = torch.optim.lr_scheduler.StepLR(optimizer, gamma=train_config["factor"],
-                                                       step_size=train_config["patience"])
+#scheduler = torch.optim.lr_scheduler.StepLR(optimizer, gamma=train_config["factor"],
+#                                                       step_size=train_config["patience"])
+
+scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma = 1.5)
+
 loss_fn = torch.nn.BCELoss()
 
 #try:
@@ -62,17 +65,17 @@ def train():
             p, y = torch.squeeze(batch["p"].to(device)), batch["y"].to(device)
             #print(p.size())
 
-            # print(p.size())
             # non_empty_mask = p.abs().sum(dim = 0).bool()
             # p = p[:, non_empty_mask]
 
             n_nodes = p.size()[1]
             #n_nodes = p.size()[0]
 
-            edges = get_edges(n_nodes)
+            edges = get_edges(n_nodes, self_linked_only = True)
             row, column = edges
+            #print(edges)
 
-            h, _ = L_GCL.compute_radials(edges, p)  # torch.zeros(n_nodes, 1)
+            h, _ = L_GCL.compute_radials(edges, p, relative_differences = False)  # torch.zeros(n_nodes, 1)
 
             output, x = model(h, p, edges)
 
@@ -100,10 +103,10 @@ def train():
             p, y = torch.squeeze(batch["p"].to(device)), batch["y"].to(device)
             n_nodes = p.size()[1]
 
-            edges = get_edges(n_nodes)
+            edges = get_edges(n_nodes, self_linked_only = True)
             row, column = edges
 
-            h, _ = L_GCL.compute_radials(edges, p)  # torch.zeros(n_nodes, 1)
+            h, _ = L_GCL.compute_radials(edges, p, relative_differences = False)  # torch.zeros(n_nodes, 1)
 
             output, x = model(h, p, edges)
 
@@ -125,7 +128,7 @@ def train():
             #tp += (prediction == y).item()
             tp += torch.sum(prediction == y).item()
 
-        print(f"Val Loss: {val_loss}, Accuracy: {tp / len(val_loader)}")
+        print(f"Val Loss: {val_loss}, Accuracy: {tp / len(val_loader) / 2}")
         torch.save({
             'epoch'               : epoch,
             'model_state_dict'    : model.state_dict(),

@@ -137,7 +137,7 @@ class L_GCL(nn.Module):
         return x
 
     @staticmethod
-    def compute_radials(edge_index, x):
+    def compute_radials(edge_index, x, relative_differences = True):
         """
         Calculates the Minkowski distance (squared) between coordinates (node embeddings) x_i and x_j
 
@@ -149,7 +149,10 @@ class L_GCL(nn.Module):
         row, col = edge_index
         #print(x.size())
         #coordinate_differences = x[row] - x[col]
-        coordinate_differences = x[:, row] - x[:, col]
+        if relative_differences:
+            coordinate_differences = x[:, row] - x[:, col]
+        else:
+            coordinate_differences = x[:, row]
         #print(coordinate_differences.size())
         minkowski_distance_squared = coordinate_differences ** 2
         minkowski_distance_squared[:, :, 0] = -minkowski_distance_squared[:, :, 0]  # Place minus sign on time coordinate as \eta = diag(-1, 1, 1, 1)
