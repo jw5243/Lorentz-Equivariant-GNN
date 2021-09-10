@@ -1,4 +1,5 @@
 import torch
+from copy import deepcopy
 
 from lorentz_equivariant_gnn.legnn_model import L_GCL, LEGNN, unsorted_segment_mean
 from data_loader import *
@@ -75,7 +76,13 @@ def train():
             row, column = edges
             #print(edges)
 
-            h, _ = L_GCL.compute_radials(edges, p, relative_differences = False)  # torch.zeros(n_nodes, 1)
+            h = deepcopy(p)
+            h = h ** 2
+            h[:, :, 0] = -h[:, :, 0]
+            h = torch.sum(h, 2).unsqueeze(2)
+
+            #h2, _ = L_GCL.compute_radials(edges, p, relative_differences = False)  # torch.zeros(n_nodes, 1)
+            #print(h2 - h)
 
             output, x = model(h, p, edges)
 
